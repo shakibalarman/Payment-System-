@@ -1,9 +1,23 @@
 """Pydantic v2 schemas for all resources."""
 from datetime import datetime
 from typing import Any, Generic, Literal, Optional, TypeVar
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 T = TypeVar("T")
+
+
+def _normalize_email(v: str) -> str:
+    # Permissive validation: allow dev domains like .local which
+    # email-validator/EmailStr rejects as "special-use or reserved".
+    if not isinstance(v, str):
+        raise ValueError("value is not a valid email address")
+    v = v.strip().lower()
+    if " " in v or "@" not in v:
+        raise ValueError("value is not a valid email address")
+    local, _, domain = v.partition("@")
+    if not local or not domain or "." not in domain:
+        raise ValueError("value is not a valid email address")
+    return v
 
 
 class Ok(BaseModel):
@@ -19,10 +33,15 @@ class Paged(BaseModel):
 
 # ---------- Auth ----------
 class RegisterIn(BaseModel):
-    email: EmailStr
+    email: str
     password: str = Field(min_length=8, max_length=128)
     full_name: str = Field(min_length=1, max_length=255)
     role: Literal["customer", "merchant"] = "customer"
+
+    @field_validator("email")
+    @classmethod
+    def valid_email(cls, v: str) -> str:
+        return _normalize_email(v)
 
     @field_validator("password")
     @classmethod
@@ -35,8 +54,13 @@ class RegisterIn(BaseModel):
 
 
 class LoginIn(BaseModel):
-    email: EmailStr
+    email: str
     password: str
+
+    @field_validator("email")
+    @classmethod
+    def valid_email(cls, v: str) -> str:
+        return _normalize_email(v)
 
 
 class RefreshIn(BaseModel):
@@ -44,7 +68,12 @@ class RefreshIn(BaseModel):
 
 
 class ForgotIn(BaseModel):
-    email: EmailStr
+    email: str
+
+    @field_validator("email")
+    @classmethod
+    def valid_email(cls, v: str) -> str:
+        return _normalize_email(v)
 
 
 class ResetIn(BaseModel):
@@ -91,7 +120,7 @@ class PaymentCreateIn(BaseModel):
     amount: int = Field(gt=0, le=100_000_000_00, description="Amount in minor units")
     currency: str = Field(default="BDT", min_length=3, max_length=8)
     description: str = Field(default="", max_length=1000)
-    customer_email: EmailStr | str = ""
+    customer_email: str = ""
     payment_method: str = ""
     invoice_id: str | None = None
     payment_link_id: str | None = None
